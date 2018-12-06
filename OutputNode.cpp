@@ -8,11 +8,8 @@ void OutputNode::set_output(double output_input){
 	output = output_input;
 }
 
-void OutputNode::set_weights(double* weights_input){
-	for (int i = 0; i < NUMBER_OF_HIDDEN_CELLS; ++i)
-	{
-		weights[i] = weights_input[i];
-	}
+void OutputNode::set_weight(double weight_input, int index){
+		weights[index] = weight_input;
 }
 
 double OutputNode::get_bias(){
