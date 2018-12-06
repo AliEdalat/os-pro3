@@ -1,5 +1,6 @@
 #include "NeuralNetwork.h"
 #include <string.h>
+#include <math.h>
 #include <sstream> //this header file is needed when using stringstream
 #include <fstream>
 #include <string>
@@ -174,6 +175,17 @@ mnist_label get_label(FILE *labelFile){
     return lbl;
 }
 
+void displayProgress(int imgCount, int errCount, int y, int x){
+
+    double successRate = 1 - ((double)errCount/(double)(imgCount+1));
+
+    if (x!=0 && y!=0) locateCursor(y, x);
+
+    printf("Result: Correct=%5d  Incorrect=%5d  Success-Rate= %5.2f%% \n",imgCount+1-errCount, errCount, successRate*100);
+
+
+}
+
 NeuralNetwork::NeuralNetwork()
 : hidden_nodes(NUMBER_OF_HIDDEN_CELLS)
 , output_nodes(NUMBER_OF_OUTPUT_CELLS)
@@ -196,10 +208,9 @@ void NeuralNetwork::set_image_and_labels(std::string image, std::string label){
 	labelFile = openMNISTLabelFile(label.c_str());
 }
 
-void* NeuralNetwork::calc_hidden(void *arg){
+void* NeuralNetwork::calculate_hidden(void *arg){
 	struct hidden_computer* info = (struct hidden_computer*)(arg);
-	sem_wait(info->hidden);
-	std::cout << info->start << std::endl;
+	//std::cout << info->start << std::endl;
 	for (int i = info->start; i < info->start+info->len; ++i)
 	{
 		double temp = 0;
@@ -209,89 +220,109 @@ void* NeuralNetwork::calc_hidden(void *arg){
         temp += (*(info->hidden_nodes))[i]->get_bias();
         (*(info->hidden_nodes))[i]->set_output((temp >= 0) ?  temp : 0);
 	}
-	int size;
-	sem_getvalue(info->hidden, &size);
-	// if (size == 0)
-	// {
-	// 	*(info->min) = true;
-	// }else if (size == 8 && *(info->min) == true){
-	// 	*(info->max) = true;
-	// }
-	//sem_wait(info->inc);
-	(*(info->max))++;
-	std::cout << (*(info->max)) << std::endl;
-	//sem_post(info->inc);
-	std::cout << "jjdjdjjdjddjjdjd   >>>>>>> " << size << std::endl; 
-	sem_post(info->hidden);
 	pthread_exit(NULL);
 }
 
+void* NeuralNetwork::calculate_output(void *arg){
+	struct output_computer* info = (struct output_computer*)(arg);
+	//std::cout << info->start << std::endl;
+	double temp = 0;
+	for (int i = 0; i < NUMBER_OF_HIDDEN_CELLS; ++i)
+	{
+        temp += (*(info->hidden_nodes))[i]->get_output() * (*(info->output_nodes))[info->key]->get_weights()[i];
+	}
+	temp += 1/(1+ exp(-1* temp));
+	(*(info->output_nodes))[info->key]->set_output(temp);
+	pthread_exit(NULL);	
+}
+
+void* NeuralNetwork::show_prediction_result(void *arg){
+	struct prediction_computer* info = (struct prediction_computer*)(arg);
+	double max_num = 0;
+    int max_index = 0;
+    for (int i=0; i<NUMBER_OF_OUTPUT_CELLS; i++){
+
+        if ((*(info->output_nodes))[i]->get_output() > max_num){
+            max_num = (*(info->output_nodes))[i]->get_output();
+            max_index = i;
+        }
+    }
+    if (max_index != info->label) (*(info->errCount))++;
+    printf("\n      Prediction: %d   Actual: %d ",max_index, info->label);
+    displayProgress(info->imgCount, *(info->errCount), 5, 66);
+}
+
 void* NeuralNetwork::draw_image(void *arg){
-	std::cout << "draw entry!!" << std::endl;
+	//std::cout << "draw entry!!" << std::endl;
 	struct read_image_thread_info* info = (struct read_image_thread_info*)(arg);
     // display progress
-    //display_loading_progress_testing(info->imgCount,5,5);
+    display_loading_progress_testing(info->imgCount,5,5);
 
     // Reading next image and corresponding label
     info->img = get_image(info->imageFile);
     info->lbl = get_label(info->labelFile);
 
-    //display_image(&img, 8,6);
-    printf("\n      Actual: %d\n", info->lbl);
-    sem_init(info->hidden, 0, 8);
+    display_image(&info->img, 8,6);
+    //printf("\n      Actual: %d\n", info->lbl);
+    //sem_init(info->hidden, 0, 8);
     pthread_exit(NULL);
 }
 
 void NeuralNetwork::run(){
 	int errCount = 0;
-	display_image_frame(7,5);
+	//display_image_frame(7,5);
 	allocate_hidden_parameters();
 	allocate_output_parameters();
 	pthread_t threads [20];
 	int counter = 0;
 	int start = 0;
 	int size;
-	struct read_image_thread_info temp;
+	struct read_image_thread_info read_info;
+	struct prediction_computer prediction_info;
 	struct hidden_computer hiddens_inf[8];
-	int max [MNIST_MAX_TESTING_IMAGES] = {0};
+	struct output_computer outputs_inf[10];
 	for (int imgCount=0; imgCount<MNIST_MAX_TESTING_IMAGES; imgCount++){
 		sem_wait(&full);
 		start = 0;
-		//int max = 0;
-		sem_init(&hidden[imgCount], 0, 0);
-		sem_init(&inc[imgCount], 0, 1);
-		temp.hidden = &hidden[imgCount];
-		temp.imageFile = imageFile;
-		temp.labelFile = labelFile;
+		read_info.imageFile = imageFile;
+		read_info.labelFile = labelFile;
+		read_info.imgCount = imgCount;
 		counter++;
-		pthread_create(&threads[0],NULL,draw_image,&temp);
+		pthread_create(&threads[0],NULL,draw_image,&read_info);
+		pthread_join(threads[0],NULL);
 		for (int i = 0; i < 8; ++i)
 		{
 			hiddens_inf[i].start = start;
 			start += 32;
 			hiddens_inf[i].len = 32;
-			hiddens_inf[i].hidden = &hidden[imgCount];
 			hiddens_inf[i].hidden_nodes = &hidden_nodes;
-			hiddens_inf[i].inputs = &temp.img;
-			hiddens_inf[i].max = &max[imgCount];
-			hiddens_inf[i].inc = &inc[imgCount];
-			pthread_create(&threads[i+1],NULL,calc_hidden,&hiddens_inf[i]);
+			hiddens_inf[i].inputs = &read_info.img;
+			pthread_create(&threads[i+1],NULL,calculate_hidden,&hiddens_inf[i]);
 		}
-		
-		sem_getvalue(&hidden[imgCount], &size);
-		std::cout << "jjdjdjjdjddjjdjd   >>>>>>> " << size << std::endl; 
-		while (max[imgCount] != 8)
+		for (int i = 0; i < 8; ++i)
 		{
-			//std::cout << max[imgCount] << std::endl;
-			;
+			pthread_join(threads[i+1],NULL);
 		}
+		for (int i = 0; i < 10; ++i)
+		{
+			outputs_inf[i].key = i;
+			outputs_inf[i].hidden_nodes = &hidden_nodes;
+			outputs_inf[i].output_nodes = &output_nodes;
+			pthread_create(&threads[i+9],NULL,calculate_output,&outputs_inf[i]);
+		}
+		for (int i = 0; i < 10; ++i)
+		{
+			pthread_join(threads[i+9],NULL);
+		}
+		prediction_info.label = read_info.lbl;
+		prediction_info.imgCount = imgCount;
+		prediction_info.errCount = &errCount;
+		prediction_info.output_nodes = &output_nodes;
+		pthread_create(&threads[19],NULL,show_prediction_result,&prediction_info);
+		pthread_join(threads[19],NULL);
 		sem_post(&full);
     }
     std::cout << counter << std::endl;
-    for (int i = 0; i < 9; ++i)
-    {
-    	pthread_join(threads[i],NULL);
-    }
     fclose(imageFile);
     fclose(labelFile);
 }

@@ -28,7 +28,6 @@ struct mnist_image{
 
 struct read_image_thread_info
 {
-	sem_t* hidden;
 	FILE* imageFile;
 	FILE* labelFile;
 	int imgCount;
@@ -38,15 +37,27 @@ struct read_image_thread_info
 
 struct hidden_computer
 {
-	sem_t* hidden;
-	sem_t* inc;
 	std::vector<HiddenNode*>* hidden_nodes;
 	int start;
 	int len;
-	int* max;
-	bool* min;
 	struct mnist_image* inputs;
 	
+};
+
+struct output_computer
+{
+	int key;
+	std::vector<HiddenNode*>* hidden_nodes;
+	std::vector<OutputNode*>* output_nodes;
+	
+};
+
+struct prediction_computer
+{
+	std::vector<OutputNode*>* output_nodes;
+	int* errCount;
+	mnist_label label;
+	int imgCount;
 };
 
 class NeuralNetwork
@@ -69,7 +80,9 @@ private:
 	void allocate_hidden_parameters();
 	void allocate_output_parameters();
 	static void* draw_image(void *arg);
-	static void* calc_hidden(void *arg);
+	static void* calculate_hidden(void *arg);
+	static void* calculate_output(void *arg);
+	static void* show_prediction_result(void *arg);
 	
 };
 
