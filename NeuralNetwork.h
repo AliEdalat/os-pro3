@@ -28,6 +28,7 @@ struct mnist_image{
 
 struct read_image_thread_info
 {
+	sem_t* hidden;
 	FILE* imageFile;
 	FILE* labelFile;
 	int imgCount;
@@ -37,6 +38,9 @@ struct read_image_thread_info
 
 struct hidden_computer
 {
+	sem_t* hidden;
+	sem_t* inc;
+	sem_t* output;
 	std::vector<HiddenNode*>* hidden_nodes;
 	int start;
 	int len;
@@ -46,6 +50,9 @@ struct hidden_computer
 
 struct output_computer
 {
+	sem_t* output;
+	sem_t* inc_output;
+	sem_t* prediction;
 	int key;
 	std::vector<HiddenNode*>* hidden_nodes;
 	std::vector<OutputNode*>* output_nodes;
@@ -54,6 +61,7 @@ struct output_computer
 
 struct prediction_computer
 {
+	sem_t* prediction;
 	std::vector<OutputNode*>* output_nodes;
 	int* errCount;
 	mnist_label label;
@@ -70,8 +78,11 @@ public:
 
 private:
 	sem_t full;
-	sem_t hidden[MNIST_MAX_TESTING_IMAGES];
-	sem_t inc[MNIST_MAX_TESTING_IMAGES];
+	sem_t hidden;
+	sem_t inc;
+	sem_t output;
+	sem_t inc_output;
+	sem_t prediction;
 	FILE* imageFile;
 	FILE* labelFile;
 	std::vector<HiddenNode*> hidden_nodes;
