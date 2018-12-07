@@ -9,6 +9,7 @@
 
 #include "HiddenNode.h"
 #include "OutputNode.h"
+#include "mnist_image.h"
 
 #define MNIST_MAX_TESTING_IMAGES 10000
 #define MNIST_IMG_WIDTH 28
@@ -22,10 +23,6 @@
 
 typedef uint8_t mnist_label;
 
-struct mnist_image{
-    uint8_t pixel[28*28];
-};
-
 struct read_image_thread_info
 {
 	sem_t* full;
@@ -33,6 +30,7 @@ struct read_image_thread_info
 	FILE* imageFile;
 	FILE* labelFile;
 	int imgCount;
+	int hidden_threads_number;
 	mnist_image img;
     mnist_label lbl;
 };
@@ -46,6 +44,7 @@ struct hidden_computer
 	std::vector<HiddenNode*>* hidden_nodes;
 	int start;
 	int len;
+	int hidden_threads_number;
 	struct mnist_image* inputs;
 	
 };
@@ -77,7 +76,7 @@ class NeuralNetwork
 public:
 	NeuralNetwork();
 	void set_image_and_labels(std::string image, std::string label);
-	void run();
+	void run(int hidden_threads_number = 8);
 
 
 private:
@@ -91,11 +90,14 @@ private:
 	sem_t predict_guard;
 	FILE* imageFile;
 	FILE* labelFile;
+	std::string image;
+	std::string label;
 	std::vector<HiddenNode*> hidden_nodes;
 	std::vector<OutputNode*> output_nodes;
 
 	void allocate_hidden_parameters();
 	void allocate_output_parameters();
+
 	static void* draw_image(void *arg);
 	static void* calculate_hidden(void *arg);
 	static void* calculate_output(void *arg);

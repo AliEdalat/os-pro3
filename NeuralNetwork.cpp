@@ -1,10 +1,12 @@
 #include "NeuralNetwork.h"
 #include <string.h>
 #include <math.h>
-#include <sstream> //this header file is needed when using stringstream
+#include <time.h>
+#include <sstream>
 #include <fstream>
 #include <string>
 #include <iostream>
+#include "utilize.h"
 
 struct MNIST_ImageFileHeader{
     uint32_t magicNumber;
@@ -17,60 +19,6 @@ struct MNIST_LabelFileHeader{
     uint32_t magicNumber;
     uint32_t maxImages;
 };
-
-void locateCursor(const int row, const int col){
-    printf("%c[%d;%dH",27,row,col);
-}
-
-void clear_screen(){
-    printf("\e[1;1H\e[2J");
-}
-
-void display_image(mnist_image *img, int row, int col){
-
-    char imgStr[(MNIST_IMG_HEIGHT * MNIST_IMG_WIDTH)+((col+1)*MNIST_IMG_HEIGHT)+1];
-    strcpy(imgStr, "");
-
-    for (int y=0; y<MNIST_IMG_HEIGHT; y++){
-
-        for (int o=0; o<col-2; o++) strcat(imgStr," ");
-        strcat(imgStr,"|");
-
-        for (int x=0; x<MNIST_IMG_WIDTH; x++){
-            strcat(imgStr, img->pixel[y*MNIST_IMG_HEIGHT+x] ? "X" : "." );
-        }
-        strcat(imgStr,"\n");
-    }
-
-    if (col!=0 && row!=0) locateCursor(row, 0);
-    printf("%s",imgStr);
-}
-
-void display_image_frame(int row, int col){
-
-    if (col!=0 && row!=0) locateCursor(row, col);
-
-    printf("------------------------------\n");
-
-    for (int i=0; i<MNIST_IMG_HEIGHT; i++){
-        for (int o=0; o<col-1; o++) printf(" ");
-        printf("|                            |\n");
-    }
-
-    for (int o=0; o<col-1; o++) printf(" ");
-    printf("------------------------------");
-
-}
-
-void display_loading_progress_testing(int imgCount, int y, int x){
-
-    float progress = (float)(imgCount+1)/(float)(MNIST_MAX_TESTING_IMAGES)*100;
-
-    if (x!=0 && y!=0) locateCursor(y, x);
-
-    printf("Testing image No. %5d of %5d images [%d%%]\n                                  ",(imgCount+1),MNIST_MAX_TESTING_IMAGES,(int)progress);
-
-}
 
 uint32_t flipBytes(uint32_t n){
 
@@ -175,17 +123,6 @@ mnist_label get_label(FILE *labelFile){
     return lbl;
 }
 
-void displayProgress(int imgCount, int errCount, int y, int x){
-
-    double successRate = 1 - ((double)errCount/(double)(imgCount+1));
-
-    if (x!=0 && y!=0) locateCursor(y, x);
-
-    printf("Result: Correct=%5d  Incorrect=%5d  Success-Rate= %5.2f%% \n",imgCount+1-errCount, errCount, successRate*100);
-
-
-}
-
 NeuralNetwork::NeuralNetwork()
 : hidden_nodes(NUMBER_OF_HIDDEN_CELLS)
 , output_nodes(NUMBER_OF_OUTPUT_CELLS)
@@ -210,8 +147,8 @@ NeuralNetwork::NeuralNetwork()
 }
 
 void NeuralNetwork::set_image_and_labels(std::string image, std::string label){
-	imageFile = openMNISTImageFile(image.c_str());
-	labelFile = openMNISTLabelFile(label.c_str());
+	this->image = image;
+	this->label = label;
 }
 
 void* NeuralNetwork::calculate_hidden(void *arg){
@@ -232,7 +169,7 @@ void* NeuralNetwork::calculate_hidden(void *arg){
 	int size;
 	sem_getvalue(info->inc, &size);
 	// std::cout << "hidden" << std::endl;
-	if (size == 8)
+	if (size == info->hidden_threads_number)
 	{
 		// for (int i = 0; i < 8; ++i)
 		// {
@@ -310,27 +247,30 @@ void* NeuralNetwork::draw_image(void *arg){
 
     display_image(&info->img, 8,6);
     //printf("\n      Actual: %d\n", info->lbl);
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < info->hidden_threads_number; ++i)
 	{
 		sem_post(info->hidden);
 	}
     pthread_exit(NULL);
 }
 
-void NeuralNetwork::run(){
+void NeuralNetwork::run(int hidden_threads_number){
 	int errCount = 0;
+	time_t startTime = time(NULL);
 	clear_screen();
     printf("    MNIST-NN: a simple 2-layer neural network processing the MNIST handwriting images\n");
 	display_image_frame(7,5);
 	allocate_hidden_parameters();
 	allocate_output_parameters();
-	pthread_t threads [20];
+	imageFile = openMNISTImageFile(image.c_str());
+	labelFile = openMNISTLabelFile(label.c_str());
+	pthread_t threads [12 + hidden_threads_number];
 	int counter = 0;
 	int start = 0;
 	int size;
 	struct read_image_thread_info read_info;
 	struct prediction_computer prediction_info;
-	struct hidden_computer hiddens_inf[8];
+	struct hidden_computer hiddens_inf[hidden_threads_number];
 	struct output_computer outputs_inf[10];
 	for (int imgCount=0; imgCount < MNIST_MAX_TESTING_IMAGES; imgCount++){
 		//sem_wait(&full);
@@ -347,20 +287,22 @@ void NeuralNetwork::run(){
 		read_info.imgCount = imgCount;
 		read_info.hidden = &hidden;
 		read_info.full = &full;
+		read_info.hidden_threads_number = hidden_threads_number;
 		counter++;
 		pthread_create(&threads[0],NULL,draw_image,&read_info);
 		pthread_join(threads[0],NULL);
-		for (int i = 0; i < 8; ++i)
+		for (int i = 0; i < hidden_threads_number; ++i)
 		{
 			hiddens_inf[i].start = start;
-			start += 32;
-			hiddens_inf[i].len = 32;
+			start += (256/hidden_threads_number);
+			hiddens_inf[i].len = (256/hidden_threads_number);
 			hiddens_inf[i].hidden = &hidden;
 			hiddens_inf[i].inc = &inc;
 			hiddens_inf[i].output_guard = &output_guard;
 			hiddens_inf[i].output = &output;
 			hiddens_inf[i].hidden_nodes = &hidden_nodes;
 			hiddens_inf[i].inputs = &read_info.img;
+			hiddens_inf[i].hidden_threads_number = hidden_threads_number;
 			pthread_create(&threads[i+1],NULL,calculate_hidden,&hiddens_inf[i]);
 		}
 		// for (int i = 0; i < 8; ++i)
@@ -376,7 +318,7 @@ void NeuralNetwork::run(){
 			outputs_inf[i].prediction = &prediction;
 			outputs_inf[i].predict_guard = &predict_guard;
 			outputs_inf[i].output = &output;
-			pthread_create(&threads[i+9],NULL,calculate_output,&outputs_inf[i]);
+			pthread_create(&threads[i + hidden_threads_number + 1],NULL,calculate_output,&outputs_inf[i]);
 		}
 		// for (int i = 0; i < 10; ++i)
 		// {
@@ -388,12 +330,12 @@ void NeuralNetwork::run(){
 		prediction_info.output_nodes = &output_nodes;
 		prediction_info.prediction = &prediction;
 		prediction_info.full = &full;
-		pthread_create(&threads[19],NULL,show_prediction_result,&prediction_info);
+		pthread_create(&threads[11 + hidden_threads_number],NULL,show_prediction_result,&prediction_info);
 		//pthread_join(threads[19],NULL);
 		// while(1){
 		// 	;
 		// }
-		for (int i = 0; i < 20; ++i)
+		for (int i = 0; i < (12 + hidden_threads_number); ++i)
 		{
 			pthread_join(threads[i], NULL);
 		}
@@ -403,6 +345,9 @@ void NeuralNetwork::run(){
     fclose(imageFile);
     fclose(labelFile);
     locateCursor(38, 5);
+    time_t endTime = time(NULL);
+    double executionTime = difftime(endTime, startTime);
+    printf("\n    DONE! Total execution time: %.1f sec\n\n",executionTime);
 }
 
 void NeuralNetwork::allocate_hidden_parameters(){

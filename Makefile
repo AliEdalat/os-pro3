@@ -1,11 +1,13 @@
 HiddenNode: HiddenNode.cpp HiddenNode.h
-	g++ -c HiddenNode.cpp -o HiddenNode
+	g++ -std=c++11 -c HiddenNode.cpp -o HiddenNode
 OutputNode: OutputNode.cpp OutputNode.h
-	g++ -c OutputNode.cpp -o OutputNode
-NeuralNetwork: NeuralNetwork.cpp NeuralNetwork.h
-	g++ -c NeuralNetwork.cpp -o NeuralNetwork
+	g++ -std=c++11 -c OutputNode.cpp -o OutputNode
+NeuralNetwork: utilize NeuralNetwork.cpp NeuralNetwork.h
+	g++ -std=c++11 -c NeuralNetwork.cpp -o NeuralNetwork
+utilize: utilize.cpp utilize.h
+	g++ -std=c++11 -c utilize.cpp -o utilize
 .: HiddenNode OutputNode NeuralNetwork main.cpp
-	g++ -pthread HiddenNode OutputNode NeuralNetwork main.cpp
+	g++ -std=c++11 -pthread utilize HiddenNode OutputNode NeuralNetwork main.cpp
 
 clean:
 	rm OutputNode HiddenNode NeuralNetwork
