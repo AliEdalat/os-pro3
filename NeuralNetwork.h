@@ -23,6 +23,12 @@
 
 typedef uint8_t mnist_label;
 
+struct image_info
+{
+	struct mnist_image image;
+	mnist_label label;
+};
+
 struct read_image_thread_info
 {
 	sem_t* full;
@@ -30,6 +36,8 @@ struct read_image_thread_info
 	sem_t* guard_other;
 	FILE* imageFile;
 	FILE* labelFile;
+	struct image_info* slice;
+	bool* read_new_slice;
 	int imgCount;
 	int hidden_threads_number;
 	mnist_image img;

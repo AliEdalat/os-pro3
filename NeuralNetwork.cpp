@@ -247,8 +247,16 @@ void* NeuralNetwork::draw_image(void *arg){
     display_loading_progress_testing(info->imgCount,5,5);
 
     // Reading next image and corresponding label
-    info->img = get_image(info->imageFile);
-    info->lbl = get_label(info->labelFile);
+    if (info->imgCount % 20 == 0)
+    {
+    	for (int i = 0; i < 20; ++i)
+	    {
+	    	(info->slice)[i].image = get_image(info->imageFile);
+	    	(info->slice)[i].label = get_label(info->labelFile);
+	    }
+    }
+    info->img = (info->slice)[info->imgCount%20].image;
+    info->lbl = (info->slice)[info->imgCount%20].label;
 
     display_image(&info->img, 8,6);
     //printf("\n      Actual: %d\n", info->lbl);
@@ -278,6 +286,8 @@ void NeuralNetwork::run(int hidden_threads_number){
 	struct prediction_computer prediction_info;
 	struct hidden_computer hiddens_inf[hidden_threads_number];
 	struct output_computer outputs_inf[10];
+	bool read_new_slice = false;
+	struct image_info slice [20];
 	for (int imgCount=0; imgCount < MNIST_MAX_TESTING_IMAGES; imgCount++){
 		//sem_wait(&full);
 		start = 0;
@@ -294,6 +304,9 @@ void NeuralNetwork::run(int hidden_threads_number){
 		read_info.imgCount = imgCount;
 		read_info.hidden = &hidden;
 		read_info.full = &full;
+		read_info.slice = slice;
+		read_new_slice = (imgCount%20 == 0) ? true : false;
+		read_info.read_new_slice = &read_new_slice;
 		read_info.guard_other = &guard_other;
 		read_info.hidden_threads_number = hidden_threads_number;
 		counter++;
