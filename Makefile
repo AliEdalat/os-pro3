@@ -10,4 +10,4 @@ utilize: utilize.cpp utilize.h
 	g++ -std=c++11 -pthread utilize HiddenNode OutputNode NeuralNetwork main.cpp
 
 clean:
-	rm OutputNode HiddenNode NeuralNetwork
+	rm OutputNode HiddenNode NeuralNetwork utilize

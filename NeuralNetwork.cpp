@@ -144,6 +144,7 @@ NeuralNetwork::NeuralNetwork()
 	sem_init(&output, 0, 0);
 	sem_init(&inc_output, 0, 0);
 	sem_init(&prediction, 0, 0);
+	sem_init(&guard_other, 0, 0);
 }
 
 void NeuralNetwork::set_image_and_labels(std::string image, std::string label){
@@ -179,6 +180,9 @@ void* NeuralNetwork::calculate_hidden(void *arg){
 		{
 			sem_post(info->output);
 		}
+		sem_init(info->hidden, 0, 0);
+		sem_post(info->full);
+
 	}
 	sem_post(info->output_guard);
 	pthread_exit(NULL);
@@ -208,6 +212,7 @@ void* NeuralNetwork::calculate_output(void *arg){
 		// }
 		// std::cout << "prediction flag" << std::endl;
 		sem_post(info->prediction);
+		sem_post(info->guard_other);
 	}
 	sem_post(info->predict_guard);
 	pthread_exit(NULL);	
@@ -229,7 +234,7 @@ void* NeuralNetwork::show_prediction_result(void *arg){
     if (max_index != info->label) (*(info->errCount))++;
     printf("\n      Prediction: %d   Actual: %d ",max_index, info->label);
     displayProgress(info->imgCount, *(info->errCount), 5, 66);
-    sem_post(info->full);
+    //sem_post(info->full);
     // std::cout << "show_prediction_result_completed" << std::endl;
     pthread_exit(NULL);
 }
@@ -251,6 +256,7 @@ void* NeuralNetwork::draw_image(void *arg){
 	{
 		sem_post(info->hidden);
 	}
+	sem_post(info->guard_other);
     pthread_exit(NULL);
 }
 
@@ -279,6 +285,7 @@ void NeuralNetwork::run(int hidden_threads_number){
 		sem_init(&inc, 0, 0);
 		sem_init(&output, 0, 0);
 		sem_init(&inc_output, 0, 0);
+		sem_init(&guard_other, 0, 0);
 		sem_init(&prediction, 0, 0);
 		sem_init(&output_guard, 0, 1);
 		sem_init(&predict_guard, 0, 1);
@@ -287,10 +294,12 @@ void NeuralNetwork::run(int hidden_threads_number){
 		read_info.imgCount = imgCount;
 		read_info.hidden = &hidden;
 		read_info.full = &full;
+		read_info.guard_other = &guard_other;
 		read_info.hidden_threads_number = hidden_threads_number;
 		counter++;
 		pthread_create(&threads[0],NULL,draw_image,&read_info);
-		pthread_join(threads[0],NULL);
+		sem_wait(&guard_other);
+		//pthread_join(threads[0],NULL);
 		for (int i = 0; i < hidden_threads_number; ++i)
 		{
 			hiddens_inf[i].start = start;
@@ -300,6 +309,7 @@ void NeuralNetwork::run(int hidden_threads_number){
 			hiddens_inf[i].inc = &inc;
 			hiddens_inf[i].output_guard = &output_guard;
 			hiddens_inf[i].output = &output;
+			hiddens_inf[i].full = &full;
 			hiddens_inf[i].hidden_nodes = &hidden_nodes;
 			hiddens_inf[i].inputs = &read_info.img;
 			hiddens_inf[i].hidden_threads_number = hidden_threads_number;
@@ -318,6 +328,7 @@ void NeuralNetwork::run(int hidden_threads_number){
 			outputs_inf[i].prediction = &prediction;
 			outputs_inf[i].predict_guard = &predict_guard;
 			outputs_inf[i].output = &output;
+			outputs_inf[i].guard_other = &guard_other;
 			pthread_create(&threads[i + hidden_threads_number + 1],NULL,calculate_output,&outputs_inf[i]);
 		}
 		// for (int i = 0; i < 10; ++i)
@@ -331,6 +342,7 @@ void NeuralNetwork::run(int hidden_threads_number){
 		prediction_info.prediction = &prediction;
 		prediction_info.full = &full;
 		pthread_create(&threads[11 + hidden_threads_number],NULL,show_prediction_result,&prediction_info);
+		//sem_post(&guard_other);
 		//pthread_join(threads[19],NULL);
 		// while(1){
 		// 	;

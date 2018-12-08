@@ -27,6 +27,7 @@ struct read_image_thread_info
 {
 	sem_t* full;
 	sem_t* hidden;
+	sem_t* guard_other;
 	FILE* imageFile;
 	FILE* labelFile;
 	int imgCount;
@@ -41,6 +42,7 @@ struct hidden_computer
 	sem_t* inc;
 	sem_t* output;
 	sem_t* output_guard;
+	sem_t* full;
 	std::vector<HiddenNode*>* hidden_nodes;
 	int start;
 	int len;
@@ -55,6 +57,7 @@ struct output_computer
 	sem_t* inc_output;
 	sem_t* prediction;
 	sem_t* predict_guard;
+	sem_t* guard_other;
 	int key;
 	std::vector<HiddenNode*>* hidden_nodes;
 	std::vector<OutputNode*>* output_nodes;
@@ -88,6 +91,7 @@ private:
 	sem_t prediction;
 	sem_t output_guard;
 	sem_t predict_guard;
+	sem_t guard_other;
 	FILE* imageFile;
 	FILE* labelFile;
 	std::string image;
